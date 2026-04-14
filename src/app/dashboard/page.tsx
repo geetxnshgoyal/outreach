@@ -11,6 +11,7 @@ export default async function DashboardPage() {
     const session = await auth();
     const isAdmin = (session?.user as any)?.role === "ADMIN";
     
+    // Deployment trigger: 2026-04-14 v2
     const [participants, events] = await Promise.all([
       getParticipants({}),
       getEvents()
