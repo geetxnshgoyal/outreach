@@ -1,4 +1,5 @@
 import { getParticipants, getEvents } from "@/lib/actions";
+import { auth } from "@/auth";
 import ParticipantTable from "@/components/ParticipantTable";
 import EventOverview from "@/components/EventOverview";
 import { Users, PhoneCall, CheckCircle2, Clock } from "lucide-react";

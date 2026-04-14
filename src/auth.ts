@@ -24,7 +24,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         // 3. Check Firestore for individual Manager accounts
         try {
-          const { db } = await import("@/lib/firebase-admin");
+          const { getDb } = await import("@/lib/firebase-admin");
+          const db = getDb();
           const userDoc = await db.collection("users").doc(email).get();
           
           if (userDoc.exists) {

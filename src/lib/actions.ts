@@ -1,12 +1,14 @@
 "use server";
 
-import { db, admin } from "@/lib/firebase-admin";
+import { getDb, admin } from "@/lib/firebase-admin";
 import { auth } from "@/auth";
 import Papa from "papaparse";
 import { sendOutreachEmail } from "./mail";
 
 const PARTICIPANTS_COLLECTION = "participants";
 const EVENTS_COLLECTION = "events";
+
+const db = getDb();
 
 // Helper to convert Firebase Timestamps to serializable strings/objects
 function serialize(data: any) {
