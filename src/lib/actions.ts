@@ -106,35 +106,68 @@ export async function processCSV(eventId: string, filename: string, csvContent: 
   await batch.commit();
 
   if (addedCount > 0 && eventData) {
-    await sendOutreachEmail(addedCount, eventData.name);
+    // Non-blocking email send
+    sendOutreachEmail(addedCount, eventData.name).catch(console.error);
   }
 
   return { addedCount, skippedCount: 0 };
 }
 
 export async function getEvents() {
-  const snapshot = await db.collection(EVENTS_COLLECTION).orderBy("name").get();
+  const session = await auth();
+  if (!session) throw new Error("Unauthorized");
+  const user = session.user as any;
+
+  let query: admin.firestore.Query = db.collection(EVENTS_COLLECTION);
+  
+  // If OUTREACH team, only show their assigned event
+  if (user.role === "OUTREACH") {
+    query = query.where("managerEmail", "==", user.email.toLowerCase());
+  }
+
+  const snapshot = await query.orderBy("name").get();
   return snapshot.docs.map(doc => serialize({ id: doc.id, ...doc.data() }));
 }
 
 export async function getParticipants(filters: { eventId?: string; status?: string; search?: string }) {
   const session = await auth();
   if (!session) throw new Error("Unauthorized");
+  const user = session.user as any;
 
   let query: admin.firestore.Query = db.collection(PARTICIPANTS_COLLECTION);
 
-  if (filters.eventId) {
+  // RBAC: Managers only see their event
+  if (user.role === "OUTREACH") {
+    // Find the event ID assigned to this manager
+    const eventSnap = await db.collection(EVENTS_COLLECTION)
+      .where("managerEmail", "==", user.email.toLowerCase())
+      .limit(1)
+      .get();
+    
+    if (eventSnap.empty) return []; // No assigned event
+    const assignedEventId = eventSnap.docs[0].id;
+    query = query.where("eventId", "==", assignedEventId);
+  } else if (filters.eventId) {
     query = query.where("eventId", "==", filters.eventId);
   }
+
   if (filters.status) {
     query = query.where("outreachStatus", "==", filters.status);
   }
 
-  const snapshot = await query.orderBy("createdAt", "desc").get();
-  let participants = snapshot.docs.map(doc => serialize({ id: doc.id, ...doc.data() }));
+  const [snapshot, eventSnapshot] = await Promise.all([
+    query.orderBy("createdAt", "desc").limit(500).get(), // Limit to 500 for performance
+    db.collection(EVENTS_COLLECTION).get()
+  ]);
 
-  // Firestore doesn't support complex OR / string contain queries easily without external indexing
-  // We'll filter in memory for simplicity given the small-ish scale
+  const eventsMap = Object.fromEntries(eventSnapshot.docs.map(d => [d.id, d.data().name]));
+  let participants = snapshot.docs.map(doc => serialize({ 
+    id: doc.id, 
+    ...doc.data(),
+    event: { name: eventsMap[doc.data().eventId] || "Unknown Event" }
+  }));
+
+  // In-memory search
   if (filters.search) {
     const search = filters.search.toLowerCase();
     participants = participants.filter((p: any) => 
@@ -143,14 +176,7 @@ export async function getParticipants(filters: { eventId?: string; status?: stri
     );
   }
 
-  // Join with event names
-  const eventSnapshot = await db.collection(EVENTS_COLLECTION).get();
-  const eventsMap = Object.fromEntries(eventSnapshot.docs.map(d => [d.id, d.data().name]));
-  
-  return participants.map((p: any) => ({
-    ...p,
-    event: { name: eventsMap[p.eventId] || "Unknown Event" }
-  }));
+  return participants;
 }
 
 export async function updateParticipantStatus(id: string, status: string, notes?: string) {
