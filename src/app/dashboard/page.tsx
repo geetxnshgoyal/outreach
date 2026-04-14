@@ -4,6 +4,8 @@ import ParticipantTable from "@/components/ParticipantTable";
 import EventOverview from "@/components/EventOverview";
 import { Users, PhoneCall, CheckCircle2, Clock } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
   try {
     const session = await auth();
